@@ -1,0 +1,105 @@
+rm(list=ls())
+
+load('steadyStatesLinearFunResSpecValuesV2.RData')
+
+library(rootSolve)
+
+numVar <- 5
+numParam <- 11
+
+steadyStates$Kdot <- rep(NA,nrow(steadyStates))
+steadyStates$Ldot <- rep(NA,nrow(steadyStates))
+steadyStates$Tdot <- rep(NA,nrow(steadyStates))
+steadyStates$Adot <- rep(NA,nrow(steadyStates))
+steadyStates$Mdot <- rep(NA,nrow(steadyStates))
+
+steadyStates$eigen1 <- rep(NA,nrow(steadyStates))
+steadyStates$eigen2 <- rep(NA,nrow(steadyStates))
+steadyStates$eigen3 <- rep(NA,nrow(steadyStates))
+steadyStates$eigen4 <- rep(NA,nrow(steadyStates))
+steadyStates$eigen5 <- rep(NA,nrow(steadyStates))
+
+steadyStates$maxEigen <- rep(NA,nrow(steadyStates))
+
+sim <- function(t, state, param) 
+{
+	with(as.list(c(state, param)), 
+	{
+		dK <- theta * K * (1 + sigma * T - K) / (1 + sigma * T) - A * K * L
+		dL <- mu * A * K * L - L
+		dT <- T^beta * (M * L)^(1 - beta) - xi * T
+		dA <- -psi * A + A^(1 - lambda1 * gamma1) * L^gamma1		
+		dM <- -omega * M + M^(1 - lambda2 * gamma2) * L^gamma2
+		list(c(dK, dL, dT, dA, dM))
+	})
+}
+
+for (i in 1:nrow(steadyStates))
+{
+
+	# First we evaluate the system using the actual numerically estimated steady state => no correction for small NEGATIVE numbers
+	sys <- sim(t = 0,state = c(K = steadyStates$K[i],L = steadyStates$L[i],T = steadyStates$T[i],A = steadyStates$A[i],M = steadyStates$M[i]),param = c(theta = steadyStates$theta[i],sigma = steadyStates$sigma[i],mu = steadyStates$mu[i],beta = steadyStates$beta[i],xi = steadyStates$xi[i],lambda1 = steadyStates$lambda1[i],gamma1 = steadyStates$gamma1[i],psi = steadyStates$psi[i],lambda2 = steadyStates$lambda2[i],gamma2 = steadyStates$gamma2[i],omega = steadyStates$omega[i]))
+	
+	steadyStates[i,(numVar + numParam + 1):(numVar + numParam + numVar)] <- unlist(sys)
+	
+	# Now we actually correct if state variable has value that is small but very negative => 0
+	if (steadyStates$K[i] < 0)
+	{
+		if (steadyStates$K[i] > -0.001) {ssK <- 0}
+		else {print('Estimated values of K for steady state is negative and large in magnitude.'); ssK <- NaN}
+	}
+	else 
+	{
+		ssK <- steadyStates$K[i]
+	}
+	
+	if (steadyStates$L[i] < 0)
+	{
+		if (steadyStates$L[i] > -0.001) {ssL <- 0}
+		else {print('Estimated values of L for steady state is negative and large in magnitude.'); ssL <- NaN}
+	}
+	else 
+	{
+		ssL <- steadyStates$L[i]
+	}
+	
+	if (steadyStates$T[i] < 0)
+	{
+		if (steadyStates$T[i] > -0.001) {ssT <- 0}
+		else {print('Estimated values of T for steady state is negative and large in magnitude.'); ssT <- NaN}
+	}
+	else 
+	{
+		ssT <- steadyStates$T[i]
+	}
+	
+	if (steadyStates$A[i] < 0)
+	{
+		if (steadyStates$A[i] > -0.001) {ssA <- 0}
+		else {print('Estimated values of A for steady state is negative and large in magnitude.'); ssA <- NaN}
+	}
+	else 
+	{
+		ssA <- steadyStates$A[i]
+	}
+	
+	if (steadyStates$M[i] < 0)
+	{
+		if (steadyStates$M[i] > -0.001) {ssM <- 0}
+		else {print('Estimated values of M for steady state is negative and large in magnitude.'); ssM <- NaN}
+	}
+	else 
+	{
+		ssM <- steadyStates$M[i]
+	}
+
+	eigenValues <- eigen(jacobian.full(y = c(K = ssK,L = ssL,T = ssT,A = ssA,M = ssM),func = sim,parms = c(theta = steadyStates$theta[i],sigma = steadyStates$sigma[i],mu = steadyStates$mu[i],beta = steadyStates$beta[i],xi = steadyStates$xi[i],lambda1 = steadyStates$lambda1[i],gamma1 = steadyStates$gamma1[i],psi = steadyStates$psi[i],lambda2 = steadyStates$lambda2[i],gamma2 = steadyStates$gamma2[i],omega = steadyStates$omega[i])))
+	
+	steadyStates[i,(2 * numVar + numParam + 1):(3 * numVar + numParam)] <- eigenValues$values
+	
+	steadyStates$maxEigen[i] <- max(Re(eigenValues$values))
+}
+
+rm(eigenValues,i,numParam,numVar,sim,ssA,ssK,ssL,ssM,ssT,sys)
+
+save.image('steadyStatesLinearFunResSpecValuesV2.RData')

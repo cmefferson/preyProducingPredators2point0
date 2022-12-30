@@ -1,0 +1,85 @@
+rm(list=ls())
+
+library(nleqslv)
+
+numVar <- 5
+numParam <- 11
+
+thetaVal <- c(0.1,10)
+sigmaVal <- c(0.1,10)
+muVal <- c(0.1)
+betaVal <- c(0.1,0.5,0.9)
+xiVal <- c(0.1,10)
+lambda1Val <- c(1)
+gamma1Val <- c(0.1,0.5,0.9)
+psiVal <- c(0.1,10)
+lambda2Val <- c(1)
+# gamma2Val <- c(0.1,0.5,0.9) => Tie these values to gamma1Val under the assumption that technology dynamics work the same way regardless of which technology
+# omegaVal <- c(0.1,10) => Tie these values to psiVal  under the assumption that technology dynamics work the same way regardless of which technology
+
+values <- expand.grid(thetaVal,sigmaVal,muVal,betaVal,xiVal,lambda1Val,gamma1Val,psiVal,lambda2Val)
+names(values) <- c('theta','sigma','mu','beta','xi','lambda1','gamma1','psi','lambda2')
+values$gamma2 <- values$gamma1
+values$omega <- values$psi
+
+numParamCombos <- nrow(values)
+digitsParamValues <- 3 # Number of digits after the decimal place.  Useful for creating file names with parameter values that are not outrageous.
+
+steadyStates <- data.frame(matrix(rep(NA, (numVar + numParam) * 3 * numParamCombos),ncol = (numVar + numParam))) # Notice allow for up to 3 possible steady states for each param combo => trim the excess at end
+names(steadyStates) <- c('K','L','T','A','M','theta','sigma','mu','beta','xi','lambda1','gamma1','psi','lambda2','gamma2','omega') # This has to have length = numVar + numParam
+
+
+for (i in 1:numParamCombos)
+{
+
+model <- function(x,par) {
+
+	r = with(par,
+	c(par$theta * x[1] * ((1 + par$sigma * x[3] - x[1]) / (1 + par$sigma * x[3])) - (x[4] * x[1] * x[2]),
+	  par$mu * (x[4] * x[1] * x[2]) - x[2],
+	  x[3]^par$beta * (x[5] * x[2])^(1 - par$beta) - par$xi * x[3],
+	  x[4]^(1 - par$lambda1 * par$gamma1) * x[2]^par$gamma1 - par$psi * x[4],
+	  x[5]^(1 - par$lambda2 * par$gamma2) * x[2]^par$gamma2 - par$omega * x[5]))
+	  
+	  r
+}
+
+# Using nleqslv
+init <- matrix(runif(500,min = 0,max = 100),ncol = numVar)
+
+param <- as.list(
+		c(	theta = round(values$theta[i],digits = digitsParamValues),
+			sigma = round(values$sigma[i],digits = digitsParamValues),
+			mu = round(values$mu[i],digits = digitsParamValues),
+			beta = round(values$beta[i],digits = digitsParamValues),
+			xi = round(values$xi[i],digits = digitsParamValues),
+			lambda1 = round(values$lambda1[i],digits = digitsParamValues),
+			gamma1 = round(values$gamma1[i],digits = digitsParamValues),
+			psi = round(values$psi[i],digits = digitsParamValues),
+			lambda2 = round(values$lambda2[i],digits = digitsParamValues),
+			gamma2 = round(values$gamma2[i],digits = digitsParamValues),
+			omega = round(values$omega[i],digits = digitsParamValues)))
+
+ss2 <- searchZeros(init,model,jac = NULL,par = param,method = 'Broyden')
+
+print(i)
+
+if (is.null(ss2$x) == F) 
+{
+	print(ss2$x)
+
+	j <- 1
+	while (j <= nrow(ss2$x) & is.na(steadyStates$K[numParamCombos]) == T)
+	{
+		steadyStates[min(which(is.na(steadyStates$K) == T)), ] <- c(ss2$x[j, ],param)
+		j <- j + 1
+	}	
+}
+
+}
+
+steadyStates <- steadyStates[1:(min(which(is.na(steadyStates$K) == T)) - 1), ]
+
+rm(values,i,digitsParamValues,init,j,model,numParam,numParamCombos,numVar,param,ss2,thetaVal,sigmaVal,muVal,betaVal,xiVal,lambda1Val,gamma1Val,psiVal,lambda2Val)
+
+save.image('steadyStatesLinearFunResSpecValuesV2.RData')

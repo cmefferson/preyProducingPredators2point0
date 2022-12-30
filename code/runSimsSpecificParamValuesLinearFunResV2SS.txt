@@ -1,0 +1,209 @@
+# This program only simulates dynamics for those parameter values that generate steady states, and it uses initial conditions distributed around those steady states.
+
+rm(list=ls())
+
+load('steadyStatesLinearFunResSpecValuesV2.RData')
+
+setwd('figsSpecificParamValuesLinearFunResV2SS')
+
+library(deSolve)
+
+windowWidth <- 15
+windowHeight <- 20
+maxTime <- 50
+numTimeIncrements <- 500000
+t <- seq(from = 0, to = maxTime, length.out = numTimeIncrements + 1)
+
+cexNum <- 1
+maxPlotValue <- 1000000000
+
+numInitCond <- 5
+
+sim <- function(t, state, param) 
+{
+	with(as.list(c(state, param)), 
+	{
+		dK <- theta * K * (1 + sigma * T - K) / (1 + sigma * T) - A * K * L
+		dL <- mu * A * K * L - L
+		dT <- T^beta * (M * L)^(1 - beta) - xi * T
+		dA <- -psi * A + A^(1 - lambda1 * gamma1) * L^gamma1		
+		dM <- -omega * M + M^(1 - lambda2 * gamma2) * L^gamma2
+		list(c(dK, dL, dT, dA, dM))
+	})
+}
+ 
+for (i in 1:nrow(steadyStates))
+{
+	print(i)
+	
+	param <- c(theta = steadyStates$theta[i],sigma = steadyStates$sigma[i],mu = steadyStates$mu[i],beta = steadyStates$beta[i],xi = steadyStates$xi[i],lambda1 = steadyStates$lambda1[i],gamma1 = steadyStates$gamma1[i],psi = steadyStates$psi[i],lambda2 = steadyStates$lambda2[i],gamma2 = steadyStates$gamma2[i],omega = steadyStates$omega[i])
+			
+	values_K <- rep(NA,length(t) * numInitCond); dim(values_K) <- c(length(t),numInitCond)
+	values_L <- rep(NA,length(t) * numInitCond); dim(values_L) <- c(length(t),numInitCond)
+	values_T <- rep(NA,length(t) * numInitCond); dim(values_T) <- c(length(t),numInitCond)
+	values_A <- rep(NA,length(t) * numInitCond); dim(values_A) <- c(length(t),numInitCond)
+	values_M <- rep(NA,length(t) * numInitCond); dim(values_M) <- c(length(t),numInitCond)
+			
+	# The following accounts for numerically estimated steady states that have small magnitude but actually negative, in other words 0.
+	if (steadyStates$K[i] <= 0)	{initCond_K <- runif(numInitCond,min = 0,max = 10)}
+	else {initCond_K <- runif(numInitCond,min = 0.5 * steadyStates$K[i],max = 1.5 * steadyStates$K[i])}
+	
+	if (steadyStates$L[i] <= 0) {initCond_L <- runif(numInitCond,min = 0,max = 10)}
+	else {initCond_L <- runif(numInitCond,min = 0.5 * steadyStates$L[i],max = 1.5 * steadyStates$L[i])}
+	
+	if (steadyStates$T[i] <= 0) {initCond_T <- runif(numInitCond,min = 0,max = 10)}
+	else {initCond_T <- runif(numInitCond,min = 0.5 * steadyStates$T[i],max = 1.5 * steadyStates$T[i])}
+	
+	if (steadyStates$A[i] <= 0) {initCond_A <- runif(numInitCond,min = 0,max = 10)}
+	else {initCond_A <- runif(numInitCond,min = 0.5 * steadyStates$A[i],max = 1.5 * steadyStates$A[i])}
+	
+	if (steadyStates$M[i] <= 0) {initCond_M <- runif(numInitCond,min = 0,max = 10)}
+	else {initCond_M <- runif(numInitCond,min = 0.5 * steadyStates$M[i],max = 1.5 * steadyStates$M[i])}
+				
+	for (m in 1:numInitCond)
+	{
+		state <- c(K = initCond_K[m], L = initCond_L[m], T = initCond_T[m],A = initCond_A[m],M = initCond_M[m])
+		dyn <- ode(y = state, times = t, func = sim, parms = param)
+		values_K[ ,m] <- dyn[ ,2]
+		values_L[ ,m] <- dyn[ ,3]
+		values_T[ ,m] <- dyn[ ,4]
+		values_A[ ,m] <- dyn[ ,5]
+		values_M[ ,m] <- dyn[ ,6]
+	}	
+			
+	pdf(width = windowWidth, height = windowHeight, file = paste('resSim_the',steadyStates$theta[i],'_sig',steadyStates$sigma[i],'_mu',steadyStates$mu[i],'_bet',steadyStates$beta[i],'_xi',steadyStates$xi[i],'_lOne',steadyStates$lambda1[i],'_gOne',steadyStates$gamma1[i],'_psi',steadyStates$psi[i],'_lTwo',steadyStates$lambda2[i],'_gTwo',steadyStates$gamma2[i],'_om',steadyStates$omega[i],'_idx',i,'.pdf',sep=''))
+	par(mar=c(4,5,3.5,2),fig=c(0,1,0.736,0.92))
+	
+	# K
+	if (max(values_K[is.na(values_K) == F]) <= maxPlotValue)
+	{
+		plot(t,values_K[ ,1],xlim=c(0,max(t)),ylim=c(min(0,min(values_K[is.na(values_K) == F])),min(max(values_K[is.na(values_K) == F]),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(italic(K)),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+						
+		for (m in 2:numInitCond)
+		{
+			lines(t,values_K[ ,m],lty='solid')
+		}
+	}
+	else
+	{
+		plot(t,log(values_K[ ,1]),xlim=c(0,max(t)),ylim=c(min(log(values_K[is.na(values_K) == F])),min(max(log(values_K[is.na(values_K) == F])),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(plain(ln)(italic(K))),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+			
+		for (m in 2:numInitCond)
+		{
+			lines(t,log(values_K[ ,m]),lty='solid')
+		}
+	}
+	
+	mtext(as.expression(substitute(italic(theta) == thetaOut,list(thetaOut = steadyStates$theta[i]))),side=3,line = 8.5,cex=1.25*cexNum,adj=0,outer=F)
+	mtext(as.expression(substitute(italic(sigma) == sigmaOut,list(sigmaOut = steadyStates$sigma[i]))),side=3,line = 7,cex=1.25*cexNum,adj=0,outer=F)
+	mtext(as.expression(substitute(italic(mu) == muOut,list(muOut = steadyStates$mu[i]))),side=3,line = 5.5,cex=1.25*cexNum,adj=0,outer=F)
+	mtext(as.expression(substitute(italic(beta) == betaOut,list(betaOut = steadyStates$beta[i]))),side=3,line = 4,cex=1.25*cexNum,adj=0,outer=F)
+	mtext(as.expression(substitute(italic(xi) == xiOut,list(xiOut = steadyStates$xi[i]))),side=3,line = 2.5,cex=1.25*cexNum,adj=0,outer=F)
+	mtext(as.expression(substitute(italic(lambda)[1] == lambda1Out,list(lambda1Out = steadyStates$lambda1[i]))),side=3,line = 1,cex=1.25*cexNum,adj=0,outer=F)
+	
+	mtext(as.expression(substitute(italic(gamma)[1] == gamma1Out,list(gamma1Out = steadyStates$gamma1[i]))),side=3,line = 7,cex=1.25*cexNum,adj=1,outer=F)	
+	mtext(as.expression(substitute(italic(psi) == psiOut,list(psiOut = steadyStates$psi[i]))),side=3,line = 5.5,cex=1.25*cexNum,adj=1,outer=F)
+	mtext(as.expression(substitute(italic(lambda)[2] == lambda2Out,list(lambda2Out = steadyStates$lambda2[i]))),side=3,line = 4,cex=1.25*cexNum,adj=1,outer=F)
+	mtext(as.expression(substitute(italic(gamma)[2] == gamma2Out,list(gamma2Out = steadyStates$gamma2[i]))),side=3,line = 2.5,cex=1.25*cexNum,adj=1,outer=F)
+	mtext(as.expression(substitute(italic(omega) == omegaOut,list(omegaOut = steadyStates$omega[i]))),side=3,line = 1,cex=1.25*cexNum,adj=1,outer=F)
+	
+
+	
+	# L
+	par(fig=c(0,1,0.552,0.736),new=T)
+
+	if (max(values_L[is.na(values_L) == F]) <= maxPlotValue)
+	{
+		plot(t,values_L[ ,1],xlim=c(0,max(t)),ylim=c(min(0,min(values_L[is.na(values_L) == F])),min(max(values_L[is.na(values_L) == F]),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(italic(L)),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+						
+		for (m in 2:numInitCond)
+		{
+			lines(t,values_L[ ,m],lty='solid')
+		}
+	}
+	else
+	{
+		plot(t,log(values_L[ ,1]),xlim=c(0,max(t)),ylim=c(min(log(values_L[is.na(values_L) == F])),min(max(log(values_L[is.na(values_L) == F])),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(plain(ln)(italic(L))),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+			
+		for (m in 2:numInitCond)
+		{
+			lines(t,log(values_L[ ,m]),lty='solid')
+		}
+	}
+	
+	
+	# T
+	par(fig=c(0,1,0.368,0.552),new=T)
+
+	if (max(values_T[is.na(values_T) == F]) <= maxPlotValue)
+	{
+		plot(t,values_T[ ,1],xlim=c(0,max(t)),ylim=c(min(0,min(values_T[is.na(values_T) == F])),min(max(values_T[is.na(values_T) == F]),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(italic(T)),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+						
+		for (m in 2:numInitCond)
+		{
+			lines(t,values_T[ ,m],lty='solid')
+		}
+	}
+	else
+	{
+		plot(t,log(values_T[ ,1]),xlim=c(0,max(t)),ylim=c(min(log(values_T[is.na(values_T) == F])),min(max(log(values_T[is.na(values_T) == F])),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(plain(ln)(italic(T))),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+			
+		for (m in 2:numInitCond)
+		{
+			lines(t,log(values_T[ ,m]),lty='solid')
+		}
+	}
+	
+	
+	# A
+	par(fig=c(0,1,0.184,0.368),new=T)
+
+	if (max(values_A[is.na(values_A) == F]) <= maxPlotValue)
+	{
+		plot(t,values_A[ ,1],xlim=c(0,max(t)),ylim=c(min(0,min(values_A[is.na(values_A) == F])),min(max(values_A[is.na(values_A) == F]),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(italic(A)),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+						
+		for (m in 2:numInitCond)
+		{
+			lines(t,values_A[ ,m],lty='solid')
+		}
+	}
+	else
+	{
+		plot(t,log(values_A[ ,1]),xlim=c(0,max(t)),ylim=c(min(log(values_A[is.na(values_A) == F])),min(max(log(values_A[is.na(values_A) == F])),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(plain(ln)(italic(A))),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+			
+		for (m in 2:numInitCond)
+		{
+			lines(t,log(values_A[ ,m]),lty='solid')
+		}
+	}
+
+
+	# M
+	par(fig=c(0,1,0,0.184),new=T)
+						
+	if (max(values_M[is.na(values_M) == F]) <= maxPlotValue)
+	{
+		plot(t,values_M[ ,1],xlim=c(0,max(t)),ylim=c(min(0,min(values_M[is.na(values_M) == F])),min(max(values_M[is.na(values_M) == F]),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(italic(M)),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+						
+		for (m in 2:numInitCond)
+		{
+			lines(t,values_M[ ,m],lty='solid')
+		}
+	}
+	else
+	{
+		plot(t,log(values_M[ ,1]),xlim=c(0,max(t)),ylim=c(min(log(values_M[is.na(values_M) == F])),min(max(log(values_M[is.na(values_M) == F])),maxPlotValue)),type = 'l',lty = 'solid',xlab=expression(italic(t)),ylab=expression(plain(ln)(italic(M))),cex.lab=1.75*cexNum,cex.axis=1.5*cexNum)
+			
+		for (m in 2:numInitCond)
+		{
+			lines(t,log(values_M[ ,m]),lty='solid')
+		}
+	}
+			
+	dev.off()
+					
+}
+
+# rm(list=ls())
+
+setwd('..')

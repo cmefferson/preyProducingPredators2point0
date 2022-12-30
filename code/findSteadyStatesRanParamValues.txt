@@ -1,0 +1,69 @@
+rm(list=ls())
+
+library(nleqslv)
+
+numVar <- 5
+numParam <- 13
+numSteadyStates <- 100
+digitsParamValues <- 3 # Number of digits after the decimal place.  Useful for creating file names with parameter values that are not outrageous.
+
+steadyStates <- data.frame(matrix(rep(NA, (numVar + numParam) * numSteadyStates),ncol = (numVar + numParam)))
+names(steadyStates) <- c('K','L','T','A','M','theta','sigma','chi','eta','mu','beta','xi','lambda1','gamma1','psi','lambda2','gamma2','omega') # This has to have length = numVar + numParam
+
+counter <- 1
+
+while (is.na(steadyStates$K[numSteadyStates]) == T & counter <= 10000)
+{
+
+model <- function(x,par) {
+
+	r = with(par,
+	c(par$theta * x[1] * ((1 + par$sigma * x[3] - x[1]) / (1 + par$sigma * x[3])) - (x[4] * x[1] * x[2]) / (1 + par$chi * x[4] * x[1] + par$eta * x[2]),
+	  par$mu * (x[4] * x[1] * x[2]) / (1 + par$chi * x[4] * x[1] + par$eta * x[2]) - x[2],
+	  x[3]^par$beta * (x[5] * x[2])^(1 - par$beta) - par$xi * x[3],
+	  x[4]^(1 - par$lambda1 * par$gamma1) * x[2]^par$gamma1 - par$psi * x[4],
+	  x[5]^(1 - par$lambda2 * par$gamma2) * x[2]^par$gamma2 - par$omega * x[5]))
+	  
+	  r
+}
+
+# Using nleqslv
+init <- matrix(runif(500,min = 0,max = 100),ncol = numVar)
+
+param <- as.list(
+		c(	theta = round(runif(1,0.01,10),digits = digitsParamValues),
+			sigma = round(runif(1,0.01,10),digits = digitsParamValues),
+			chi = round(runif(1,0.01,10),digits = digitsParamValues),
+			eta = round(runif(1,0.01,10),digits = digitsParamValues),
+			mu = round(runif(1,0.01,10),digits = digitsParamValues),
+			beta = round(runif(1,0,1),digits = digitsParamValues),
+			xi = round(runif(1,0.01,10),digits = digitsParamValues),
+			lambda1 = round(runif(1,0,2),digits = digitsParamValues),
+			gamma1 = round(runif(1,0,2),digits = digitsParamValues),
+			psi = round(runif(1,0.01,10),digits = digitsParamValues),
+			lambda2 = round(runif(1,0,2),digits = digitsParamValues),
+			gamma2 = round(runif(1,0,2),digits = digitsParamValues),
+			omega = round(runif(1,0.01,10),digits = digitsParamValues)))
+
+ss2 <- searchZeros(init,model,jac = NULL,par = param,method = 'Broyden')
+if (is.null(ss2$x) == F) {print(ss2$x)}
+
+if (is.null(ss2) == T) 
+{
+	counter <- counter + 1
+}
+else
+{
+	j <- 1
+	while (j <= nrow(ss2$x) & is.na(steadyStates$K[numSteadyStates]) == T)
+	{
+		steadyStates[min(which(is.na(steadyStates$K) == T)), ] <- c(ss2$x[j, ],param)
+		j <- j + 1
+		counter <- counter + 1
+	}	
+}
+
+}
+
+rm(counter,digitsParamValues,init,j,model,numParam,numSteadyStates,numVar,param,ss2)
+save.image('steadyStates.RData')
